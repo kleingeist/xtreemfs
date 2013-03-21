@@ -49,7 +49,8 @@ public abstract class CoordinatedReplicaUpdatePolicy extends ReplicaUpdatePolicy
     private final OSDServiceClient client;
 
 
-    public CoordinatedReplicaUpdatePolicy(List<ServiceUUID> remoteOSDUUIDs, String localUUID, String fileId, OSDServiceClient client) throws IOException {
+    public CoordinatedReplicaUpdatePolicy(List<ServiceUUID> remoteOSDUUIDs, String localUUID, String fileId,
+            OSDServiceClient client) {
         super(remoteOSDUUIDs, fileId, localUUID);
         this.client = client;
         if (Logging.isDebug())
@@ -61,9 +62,9 @@ public abstract class CoordinatedReplicaUpdatePolicy extends ReplicaUpdatePolicy
      * @param operation
      * @return number of external acks required for an operation (majority minus local replica).
      */
-    protected abstract int getNumRequiredAcks(Operation operation);
+    public abstract int getNumRequiredAcks(Operation operation);
 
-    protected abstract boolean backupCanRead();
+    public abstract boolean backupCanRead();
    
 
     @Override
@@ -385,7 +386,7 @@ public abstract class CoordinatedReplicaUpdatePolicy extends ReplicaUpdatePolicy
                     if (Logging.isDebug()) {
                         Logging.logMessage(Logging.LEVEL_DEBUG, Category.replication, this,"replicated %s successfull for %s",operation,fileId);
                     }
-                    callback.finsihed();
+                    callback.finished();
                 }
 
             }

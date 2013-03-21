@@ -9,12 +9,11 @@
 package org.xtreemfs.osd.rwre;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import org.xtreemfs.common.ReplicaUpdatePolicies;
 import org.xtreemfs.common.uuids.ServiceUUID;
 import org.xtreemfs.common.uuids.UnknownUUIDException;
@@ -36,6 +35,86 @@ import org.xtreemfs.pbrpc.generatedinterfaces.OSDServiceClient;
  * @author bjko
  */
 public class ReplicatedFileState {
+
+    public enum ReplicaState {
+        INITIALIZING, 
+        OPEN, 
+        RESET, 
+        WAITING_FOR_LEASE, 
+        BACKUP, 
+        PRIMARY, 
+        INVALIDATED
+    };
+
+    private final AtomicInteger        queuedData;
+
+    private List<ServiceUUID>          remoteOSDs;
+
+    private ReplicaUpdatePolicy        policy;
+
+    private final String               fileId;
+
+    private ReplicaState               state;
+
+    private List<ObjectVersionMapping> objectsToFetch;
+
+    private List<StageRequest>         pendingRequests;
+
+    private Flease                     lease;
+
+    private boolean                    localIsPrimary;
+
+    private FileCredentials            credentials;
+
+    private boolean                    cellOpen;
+
+    private int                        numObjectsPending;
+
+    private boolean                    primaryReset;
+
+    private boolean                    forceReset;
+
+    private XLocations                 loc;
+
+    private long                       masterEpoch;
+
+    private boolean                    invalidated;
+
+    private boolean                    invalidatedReset;
+
+    public ReplicatedFileState(String fileId, XLocations locations, ServiceUUID localUUID, FleaseStage fstage,
+            OSDServiceClient client) throws UnknownUUIDException, IOException {
+        queuedData = new AtomicInteger();
+        pendingRequests = new LinkedList();
+        this.fileId = fileId;
+        this.state = ReplicaState.INITIALIZING;
+        this.primaryReset = false;
+        this.loc = locations;
+        this.lease = Flease.EMPTY_LEASE;
+        this.forceReset = false;
+        this.masterEpoch = FleaseMessage.IGNORE_MASTER_EPOCH;
+        this.invalidated = false;
+        this.invalidatedReset = false;
+
+        remoteOSDs = new ArrayList(locations.getNumReplicas() - 1);
+        for (Replica r : locations.getReplicas()) {
+            final ServiceUUID headOSD = r.getHeadOsd();
+            if (headOSD.equals(localUUID))
+                continue;
+            remoteOSDs.add(headOSD);
+        }
+
+        if (locations.getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_WARONE)) {
+            // FIXME: instantiate the right policy
+            policy = new WaR1UpdatePolicy(remoteOSDs, localUUID.toString(), fileId, client);
+        } else if (locations.getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_WARA)) {
+            policy = new WaRaUpdatePolicy(remoteOSDs, localUUID.toString(), fileId, client);
+        } else if (locations.getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_WQRQ)) {
+            policy = new WqRqUpdatePolicy(remoteOSDs, localUUID.toString(), fileId, client);
+        } else {
+            throw new IllegalArgumentException("unsupported replica update mode: " + locations.getReplicaUpdatePolicy());
+        }
+    }
 
     /**
      * @return the credentials
@@ -138,81 +217,7 @@ public class ReplicatedFileState {
     public void setMasterEpoch(long masterEpoch) {
         this.masterEpoch = masterEpoch;
     }
-
-    public enum ReplicaState {
-        INITIALIZING,
-        OPEN,
-        RESET,
-        WAITING_FOR_LEASE,
-        BACKUP,
-        PRIMARY
-    };
-
-    private final AtomicInteger     queuedData;
-
-    private List<ServiceUUID>       remoteOSDs;
-
-    private ReplicaUpdatePolicy     policy;
-
-    private final String            fileId;
-
-    private ReplicaState            state;
-
-    private List<ObjectVersionMapping> objectsToFetch;
     
-    private List<StageRequest>      pendingRequests;
-
-    private Flease                  lease;
-
-    private boolean                 localIsPrimary;
-
-    private FileCredentials         credentials;
-
-    private boolean                 cellOpen;
-
-    private int                     numObjectsPending;
-
-    private boolean                 primaryReset;
-
-    private boolean                 forceReset;
-
-    private XLocations              loc;
-
-    private long                    masterEpoch;
-
-
-
-    public ReplicatedFileState(String fileId, XLocations locations, ServiceUUID localUUID, FleaseStage fstage, OSDServiceClient client) throws UnknownUUIDException, IOException {
-        queuedData = new AtomicInteger();
-        pendingRequests = new LinkedList();
-        this.fileId = fileId;
-        this.state = ReplicaState.INITIALIZING;
-        this.primaryReset = false;
-        this.loc = locations;
-        this.lease = Flease.EMPTY_LEASE;
-        this.forceReset = false;
-        this.masterEpoch = FleaseMessage.IGNORE_MASTER_EPOCH;
-        
-        remoteOSDs = new ArrayList(locations.getNumReplicas()-1);
-        for (Replica r : locations.getReplicas()) {
-            final ServiceUUID headOSD = r.getHeadOsd();
-            if (headOSD.equals(localUUID))
-                continue;
-            remoteOSDs.add(headOSD);
-        }
-
-        if (locations.getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_WARONE)) {
-            //FIXME: instantiate the right policy
-            policy = new WaR1UpdatePolicy(remoteOSDs, localUUID.toString(), fileId, client);
-        } else if (locations.getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_WARA)) {
-            policy = new WaRaUpdatePolicy(remoteOSDs, localUUID.toString(), fileId, client);
-        } else if (locations.getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_WQRQ)) {
-            policy = new WqRqUpdatePolicy(remoteOSDs, localUUID.toString(), fileId, client);
-        } else {
-            throw new IllegalArgumentException("unsupported replica update mode: "+locations.getReplicaUpdatePolicy());
-        }
-    }
-
     public int getDataQueueLength() {
         return queuedData.get();
     }
@@ -288,6 +293,38 @@ public class ReplicatedFileState {
         this.localIsPrimary = localIsPrimary;
     }
 
+    /**
+     * @return the XLocations
+     */
+    public XLocations getLocations() {
+        return loc;
+    }
 
+    /**
+     * Set the files' invalidated state. Once a file has been invalidated any other requests will be rejected.
+     */
+    public void setInvalidated(boolean invalidated) {
+        this.invalidated = invalidated;
+    }
 
+    /**
+     * @return True if the file has been invalidated.
+     */
+    public boolean isInvalidated() {
+        return invalidated;
+    }
+
+    /**
+     * InvalidatedReset should be set true when the file is invalidated but a reset is forced.
+     */
+    public void setInvalidatedReset(boolean invalidatedReset) {
+        this.invalidatedReset = invalidatedReset;
+    }
+
+    /**
+     * Returns true if the file is in an forced reset.
+     */
+    public boolean isInvalidatedReset() {
+        return invalidatedReset;
+    }
 }

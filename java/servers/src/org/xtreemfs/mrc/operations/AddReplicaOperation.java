@@ -9,7 +9,6 @@
 package org.xtreemfs.mrc.operations;
 
 import org.xtreemfs.common.ReplicaUpdatePolicies;
-import org.xtreemfs.common.xloc.ReplicationFlags;
 import org.xtreemfs.foundation.pbrpc.generatedinterfaces.RPC.POSIXErrno;
 import org.xtreemfs.mrc.MRCRequest;
 import org.xtreemfs.mrc.MRCRequestDispatcher;
@@ -24,11 +23,13 @@ import org.xtreemfs.mrc.metadata.FileMetadata;
 import org.xtreemfs.mrc.metadata.StripingPolicy;
 import org.xtreemfs.mrc.metadata.XLoc;
 import org.xtreemfs.mrc.metadata.XLocList;
+import org.xtreemfs.mrc.stages.XLocSetCoordinator;
+import org.xtreemfs.mrc.stages.XLocSetCoordinatorCallback;
 import org.xtreemfs.mrc.utils.Converter;
 import org.xtreemfs.mrc.utils.MRCHelper;
+import org.xtreemfs.mrc.utils.MRCHelper.GlobalFileIdResolver;
 import org.xtreemfs.mrc.utils.Path;
 import org.xtreemfs.mrc.utils.PathResolver;
-import org.xtreemfs.mrc.utils.MRCHelper.GlobalFileIdResolver;
 import org.xtreemfs.pbrpc.generatedinterfaces.Common.emptyResponse;
 import org.xtreemfs.pbrpc.generatedinterfaces.GlobalTypes.Replica;
 import org.xtreemfs.pbrpc.generatedinterfaces.MRC.xtreemfs_replica_addRequest;
@@ -37,7 +38,7 @@ import org.xtreemfs.pbrpc.generatedinterfaces.MRC.xtreemfs_replica_addRequest;
  * 
  * @author stender
  */
-public class AddReplicaOperation extends MRCOperation {
+public class AddReplicaOperation extends MRCOperation implements XLocSetCoordinatorCallback {
     
     public AddReplicaOperation(MRCRequestDispatcher master) {
         super(master);
@@ -59,11 +60,14 @@ public class AddReplicaOperation extends MRCOperation {
         
         StorageManager sMan = null;
         FileMetadata file = null;
+        String fileId;
         
         if (rqArgs.hasFileId()) {
-            
+
+            fileId = rqArgs.getFileId();
+
             // parse volume and file ID from global file ID
-            GlobalFileIdResolver idRes = new GlobalFileIdResolver(rqArgs.getFileId());
+            GlobalFileIdResolver idRes = new GlobalFileIdResolver(fileId);
             
             sMan = vMan.getStorageManager(idRes.getVolumeId());
             
@@ -82,7 +86,10 @@ public class AddReplicaOperation extends MRCOperation {
             
             res.checkIfFileDoesNotExist();
             file = res.getFile();
-            
+
+            // TODO(jdillmann): Move to MRCHelper.createGlobalFileId(VolumeInfo volume, FileMetadata file)
+            fileId = sMan.getVolumeInfo().getId() + ":" + file.getId();
+
             // check whether the path prefix is searchable
             faMan.checkSearchPermission(sMan, res, rq.getDetails().userId, rq.getDetails().superUser, rq
                     .getDetails().groupIds);
@@ -98,8 +105,7 @@ public class AddReplicaOperation extends MRCOperation {
             throw new UserException(POSIXErrno.POSIX_ERROR_EINVAL, "file '" + rqArgs.getFileId()
                 + "' is a symbolic link");
         
-        // check whether privileged permissions are granted for adding
-        // replicas
+        // check whether privileged permissions are granted for adding replicas
         faMan.checkPrivilegedPermissions(sMan, file, rq.getDetails().userId, rq.getDetails().superUser, rq
                 .getDetails().groupIds);
         
@@ -109,8 +115,7 @@ public class AddReplicaOperation extends MRCOperation {
         StripingPolicy sPol = sMan.createStripingPolicy(sp.getType().toString(), sp.getStripeSize(), sp
                 .getWidth());
         
-        // check whether the new replica relies on a set of OSDs which
-        // hasn't been used yet
+        // check whether the new replica relies on a set of OSDs which hasn't been used yet
         XLocList xLocList = file.getXLocList();
         assert (xLocList != null);
         
@@ -144,7 +149,35 @@ public class AddReplicaOperation extends MRCOperation {
         }
         
         repls[repls.length - 1] = replica;
-        xLocList = sMan.createXLocList(repls, xLocList.getReplUpdatePolicy(), xLocList.getVersion() + 1);
+        XLocList extXLocList = sMan.createXLocList(repls, xLocList.getReplUpdatePolicy(), xLocList.getVersion() + 1);
+
+        XLocSetCoordinator coordinator = master.getXLocSetCoordinator();
+        XLocSetCoordinator.RequestMethod m = coordinator.addReplicas(fileId, file, xLocList, extXLocList, rq, this);
+        
+        // Make an update with the RequestMethod as context and the Coordinator as callback. This will enqueue
+        // the RequestMethod when the update is complete
+        AtomicDBUpdate update = sMan.createAtomicDBUpdate(coordinator, m);
+        
+        // lock the replica
+        sMan.setXAttr(file.getId(), StorageManager.SYSTEM_UID, StorageManager.SYS_ATTR_KEY_PREFIX
+                + XLocSetCoordinator.XLOCSET_CHANGE_ATTR_KEY, String.valueOf(true).getBytes(), update);
+        update.execute();
+        
+    }
+
+    @Override
+    public void installXLocSet(MRCRequest rq, String fileId, XLocList xLocList, XLocList oldxLocList) throws Throwable {
+
+
+        final VolumeManager vMan = master.getVolumeManager();
+        final GlobalFileIdResolver idRes = new GlobalFileIdResolver(fileId);
+        final StorageManager sMan = vMan.getStorageManager(idRes.getVolumeId());
+
+        // retrieve the file metadata
+        final FileMetadata file = sMan.getMetadata(idRes.getLocalFileId());
+        if (file == null)
+            throw new UserException(POSIXErrno.POSIX_ERROR_ENOENT, "file '" + fileId + "' does not exist");
+
         file.setXLocList(xLocList);
         
         AtomicDBUpdate update = sMan.createAtomicDBUpdate(master, rq);
@@ -152,10 +185,15 @@ public class AddReplicaOperation extends MRCOperation {
         // update the X-Locations list
         sMan.setMetadata(file, FileMetadata.RC_METADATA, update);
         
+        // unlock the replica
+        sMan.setXAttr(file.getId(), StorageManager.SYSTEM_UID, StorageManager.SYS_ATTR_KEY_PREFIX
+                + XLocSetCoordinator.XLOCSET_CHANGE_ATTR_KEY, null, update);
+
         // set the response
         rq.setResponse(emptyResponse.getDefaultInstance());
         
         update.execute();
     }
-    
+
+
 }

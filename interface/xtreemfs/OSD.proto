@@ -104,6 +104,14 @@ message TruncateLog {
   repeated TruncateRecord records = 1;
 }
 
+// Version of the latest XLocSet a Replica has beeen part of 
+// and a flag indicating if the Replica is currently participating
+// in a XLocSetChange 
+message XLocSetVersionState {
+  required fixed32 version = 1;
+  required bool invalidated = 2;
+}
+
 // Full status of a replica. Used by the read-write
 // replication during Replica Reset.
 message ReplicaStatus {
@@ -327,6 +335,23 @@ message xtreemfs_rwr_reset_completeRequest {
   required fixed32 primary_epoch = 3;
 }
 
+
+message xtreemfs_xloc_set_invalidateRequest {
+  required FileCredentials file_credentials = 1;
+  required string file_id = 2;
+}
+
+message xtreemfs_xloc_set_invalidateResponse {
+  required bool is_primary = 1;
+  optional ReplicaStatus status = 2;
+}
+
+message xtreemfs_rwr_fetch_invalidatedRequest {
+  required FileCredentials file_credentials = 1;
+  required string file_id = 2;
+  required AuthoritativeReplicaState state = 3;
+}
+
 service OSDService {
   
   option(interface_id)=30001;
@@ -520,6 +545,17 @@ service OSDService {
   // Shuts the OSD down. Requires AUTH_PASSWORD.
   rpc xtreemfs_shutdown(emptyRequest) returns(emptyResponse) {
     option(proc_id)=70;
+  };
+
+  // Invalidate the replicas location set
+  rpc xtreemfs_xloc_set_invalidate(xtreemfs_xloc_set_invalidateRequest) returns(xtreemfs_xloc_set_invalidateResponse) {
+    option(proc_id)=81;
+  };
+
+  // Instructs a replica to update to the AuthoritativeReplicaState 
+  // This operation can only be called when the replica is invalidated or new
+  rpc xtreemfs_rwr_fetch_invalidated(xtreemfs_rwr_fetch_invalidatedRequest) returns(emptyResponse) {
+    option(proc_id)=82;
   };
 
 }
