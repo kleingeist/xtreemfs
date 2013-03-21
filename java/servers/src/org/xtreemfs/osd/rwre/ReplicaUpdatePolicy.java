@@ -114,8 +114,7 @@ public abstract class ReplicaUpdatePolicy {
         ClientOperationCallback callback);
 
     public static interface ClientOperationCallback {
-        
-        public void finsihed();
+        public void finished();
         public void failed(ErrorResponse error);
     }
 

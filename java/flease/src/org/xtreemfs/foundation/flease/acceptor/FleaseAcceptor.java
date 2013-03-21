@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+
 import org.xtreemfs.foundation.TimeSync;
 import org.xtreemfs.foundation.buffer.ASCIIString;
 import org.xtreemfs.foundation.flease.FleaseConfig;
@@ -118,8 +119,14 @@ public class FleaseAcceptor {
             if ((cc.lastAccess+config.getCellTimeout()) < System.currentTimeMillis()) {
                 if (Logging.isDebug())
                     Logging.logMessage(Logging.LEVEL_DEBUG, Category.replication,this,"A GCed cell "+cellId);
-                //cell is outdated and GCed
+                // Cell is outdated and GCed.
+
+                // Transfer the local view id from the (outdated) cell.
+                int prevViewId = cc.getViewId();
+
+                // Create a new cell and transfer the previous viewId.
                 cc = new FleaseAcceptorCell();
+                cc.setViewId(prevViewId);
                 cells.put(cellId,cc);
             }
         }
@@ -311,17 +318,18 @@ public class FleaseAcceptor {
         assert(msg.getCellId() != null);
 
         final int myViewId = getCell(msg.getCellId()).getViewId();
-        if ( (myViewId == FleaseMessage.VIEW_ID_INVALIDATED) ||
-             (myViewId > msg.getViewId()) ) {
-            //MOEEEEp
+        if (myViewId < msg.getViewId()) {
+            // If the local view lower than the request's, the viewListener has to be informed to update the local view,
+            // but the request can be answered. This is also true if the local view is invalidated, because it is
+            // internally represented as -1
+            viewListener.viewIdChangeEvent(msg.getCellId(), msg.getViewId());
+        }
+
+        if ((myViewId == FleaseMessage.VIEW_ID_INVALIDATED) || (myViewId > msg.getViewId())) {
+            // Requests within the context of an older view are invalid.
             FleaseMessage response = new FleaseMessage(FleaseMessage.MsgType.MSG_WRONG_VIEW, msg);
             response.setViewId(myViewId);
             return response;
-        }
-        if (myViewId < msg.getViewId()) {
-            //notify listener
-            viewListener.viewIdChangeEvent(msg.getCellId(), msg.getViewId());
-            return null;
         }
 
         FleaseMessage response = null;
