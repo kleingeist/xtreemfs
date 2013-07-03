@@ -1020,4 +1020,11 @@ public class OSDRequestDispatcher implements RPCServerRequestListener, LifeCycle
         return heartbeatThread.getLastHeartbeat();
     }
     
+    /**
+     * Instruct the HeartbeatThread to renew the address mappings associated to this OSD.
+     */
+    public void renewAddressMappings() {
+        heartbeatThread.renewAddressMappings();
+    }
+
 }
