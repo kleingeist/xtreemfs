@@ -424,7 +424,8 @@ public class OSDRequestDispatcher implements RPCServerRequestListener, LifeCycle
                 return data.build();
             }
         };
-        heartbeatThread = new HeartbeatThread("OSD HB Thr", dirClient, config.getUUID(), gen, config, true);
+        heartbeatThread = new HeartbeatThread("OSD HB Thr", dirClient, config.getUUID(), gen, config, true,
+                config.isUsingRenewalSignal());
         
         statusServer = new StatusServer(ServiceType.SERVICE_TYPE_OSD, this, config.getHttpPort());
         statusServer.registerModule(new StatusPage());
@@ -1020,11 +1021,4 @@ public class OSDRequestDispatcher implements RPCServerRequestListener, LifeCycle
         return heartbeatThread.getLastHeartbeat();
     }
     
-    /**
-     * Instruct the HeartbeatThread to renew the address mappings associated to this OSD.
-     */
-    public void renewAddressMappings() {
-        heartbeatThread.renewAddressMappings();
-    }
-
 }
