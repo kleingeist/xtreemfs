@@ -72,7 +72,8 @@ public final class UUIDResolver extends Thread {
             theInstance = this;
         }
         
-        List<AddressMapping.Builder> ntwrks = NetUtils.getReachableEndpoints(0, "http");
+        // TODO(jdillmann): Reload myNetworks on the OSDs when the addressMapping is renewed
+        List<AddressMapping.Builder> ntwrks = NetUtils.getReachableEndpoints(0, "http", true);
         myNetworks = new ArrayList(ntwrks.size());
         for (AddressMapping.Builder network : ntwrks) {
             myNetworks.add(network.getMatchNetwork());
@@ -174,22 +175,44 @@ public final class UUIDResolver extends Thread {
                         uuid);
                 throw new UnknownUUIDException("uuid " + uuid + " is not registered at directory server");
             }
-            for (AddressMapping addrMapping : ams.getMappingsList()) {
+
+            List<AddressMapping> mappings = ams.getMappingsList();
+
+            // Iterate through the mappings and look for a matching network. Matches on the same network will be
+            // preferred to global ones.
+            AddressMapping matchingAddress = null;
+            for (AddressMapping addrMapping : mappings) {
                 final String network = addrMapping.getMatchNetwork();
-                if ((myNetworks.contains(network) || (network.equals("*"))) && ((protocol == null) || addrMapping.getProtocol().equals(protocol))) {
-                    final String address = addrMapping.getAddress();
-                    final String proto = addrMapping.getProtocol();
-                    final int port = addrMapping.getPort();
-                    final long validUntil = TimeSync.getLocalSystemTime() + addrMapping.getTtlS() * 1000;
-                    final InetSocketAddress endpoint = new InetSocketAddress(address, port);
-                    if (Logging.isDebug())
-                        Logging.logMessage(Logging.LEVEL_DEBUG, Category.misc, this,
-                            "matching uuid record found for uuid " + uuid + " with network " + network);
-                    UUIDCacheEntry e = new UUIDCacheEntry(uuid, validUntil, new Mapping(proto, endpoint, address + ":" + port));
-                    cache.put(uuid, e);
-                    return e;
+
+                // Cache the first default network found. This will be overwritten by direct network matches.
+                if (network.equals("*")) {
+                    if (matchingAddress == null && ((protocol == null) || addrMapping.getProtocol().equals(protocol))) {
+                        matchingAddress = addrMapping;
+                    }
+                } else if (myNetworks.contains(network)) {
+                    // Use the first address found in the same network and stop looking for further matches.
+                    if ((protocol == null) || addrMapping.getProtocol().equals(protocol)) {
+                        matchingAddress = addrMapping;
+                        break;
+                    }
                 }
             }
+
+            if (matchingAddress != null) {
+                final String address = matchingAddress.getAddress();
+                final String proto = matchingAddress.getProtocol();
+                final int port = matchingAddress.getPort();
+                final long validUntil = TimeSync.getLocalSystemTime() + matchingAddress.getTtlS() * 1000;
+                final InetSocketAddress endpoint = new InetSocketAddress(address, port);
+                if (Logging.isDebug())
+                    Logging.logMessage(Logging.LEVEL_DEBUG, Category.misc, this, "matching uuid record found for uuid "
+                            + uuid + " with network " + matchingAddress.getMatchNetwork());
+                UUIDCacheEntry e = new UUIDCacheEntry(uuid, validUntil, new Mapping(proto, endpoint, address + ":"
+                        + port));
+                cache.put(uuid, e);
+                return e;
+            }
+
             if (Logging.isDebug())
                 Logging.logMessage(Logging.LEVEL_DEBUG, Category.misc, this, "NO UUID MAPPING FOR: %s", uuid);
             throw new UnknownUUIDException(
