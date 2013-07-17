@@ -77,7 +77,8 @@ public class OSDConfig extends ServiceConfig {
             Parameter.VIVALDI_MAX_RETRIES_FOR_A_REQUEST,
             Parameter.VIVALDI_MAX_REQUEST_TIMEOUT_IN_MS,
             Parameter.VIVALDI_TIMER_INTERVAL_IN_MS, 
-            Parameter.USE_RENEWAL_SIGNAL
+            Parameter.USE_RENEWAL_SIGNAL,
+            Parameter.USE_MULTIHOMING
     };
     /*
      * @formatter:on   
@@ -277,9 +278,5 @@ public class OSDConfig extends ServiceConfig {
 
     public int getVivaldiTimerInterval() {
         return (Integer) parameter.get(Parameter.VIVALDI_TIMER_INTERVAL_IN_MS);
-    }
-
-    public boolean isUsingRenewalSignal() {
-        return (Boolean) parameter.get(Parameter.USE_RENEWAL_SIGNAL);
     }
 }
