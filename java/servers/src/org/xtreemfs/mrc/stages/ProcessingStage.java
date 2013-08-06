@@ -48,7 +48,7 @@ import org.xtreemfs.mrc.operations.GetSuitableOSDsOperation;
 import org.xtreemfs.mrc.operations.GetXAttrOperation;
 import org.xtreemfs.mrc.operations.GetXAttrsOperation;
 import org.xtreemfs.mrc.operations.GetXLocListOperation;
-import org.xtreemfs.mrc.operations.InternalCallbackOperation;
+import org.xtreemfs.mrc.operations.GetXLocSetOperation;
 import org.xtreemfs.mrc.operations.InternalDebugOperation;
 import org.xtreemfs.mrc.operations.MRCOperation;
 import org.xtreemfs.mrc.operations.MoveOperation;
@@ -83,8 +83,6 @@ public class ProcessingStage extends MRCStage {
     
     public static final int                  STAGEOP_INTERNAL_CALLBACK = 2;
 
-    public static final int                  PROC_ID_INTERNAL_CALLBACK = -1;
-
     private final MRCRequestDispatcher       master;
     
     private final Map<Integer, MRCOperation> operations;
@@ -109,8 +107,6 @@ public class ProcessingStage extends MRCStage {
     }
     
     public void installOperations() {
-        operations.put(PROC_ID_INTERNAL_CALLBACK, new InternalCallbackOperation(master));
-
         operations.put(MRCServiceConstants.PROC_ID_XTREEMFS_SHUTDOWN, new ShutdownOperation(master));
         operations.put(MRCServiceConstants.PROC_ID_XTREEMFS_MKVOL, new CreateVolumeOperation(master));
         operations.put(MRCServiceConstants.PROC_ID_XTREEMFS_RMVOL, new DeleteVolumeOperation(master));
@@ -156,6 +152,7 @@ public class ProcessingStage extends MRCStage {
                 new SetReplicaUpdatePolicyOperation(master));
         operations.put(MRCServiceConstants.PROC_ID_XTREEMFS_SET_READ_ONLY_XATTR, new SetReadOnlyXattrOperation(master));
         operations.put(MRCServiceConstants.PROC_ID_XTREEMFS_GET_FILE_CREDENTIALS, new GetFileCredentialsOperation(master));
+        operations.put(MRCServiceConstants.PROC_ID_XTREEMFS_GET_XLOCSET, new GetXLocSetOperation(master));
     }
     
     public Map<Integer, Integer> get_opCountMap() {
@@ -328,13 +325,38 @@ public class ProcessingStage extends MRCStage {
     }
     
     /**
-     * Execute an internal callback operation
+     * Enqueue an internal callback operation.<br>
+     * Internal callbacks can be used to execute something in the context of the ProcessingStage. This is needed to
+     * ensure database calls are exclusive and always from the same process.
+     * 
+     * @param rq
+     *            The internal callback request.
+     */
+    public void enqueueInternalCallbackOperation(MRCRequest rq, InternalCallbackInterface callback) {
+        InternalCallbackMRCRequest cbRq = new InternalCallbackMRCRequest(rq, callback);
+        q.add(new StageMethod(cbRq, ProcessingStage.STAGEOP_INTERNAL_CALLBACK, null));
+    }
+
+    /**
+     * Execute an internal callback operation.
      * 
      * @param method
-     *            with an RPCRequest of type RPCCallbackRequest
+     *            with an RPCRequest of type {@link InternalCallbackMRCRequest}.
      */
     private void executeInternalCallback(StageMethod method) {
-        execute(operations.get(PROC_ID_INTERNAL_CALLBACK), method);
+        // Call execute on an anonymous operation to avoid duplicating the error handling.
+        execute(new MRCOperation(master) {
+            @Override
+            public void startRequest(MRCRequest rq) throws Throwable {
+                if (!(rq instanceof InternalCallbackMRCRequest)) {
+                    // TODO(jdillmann): check if this exception is the right one.
+                    throw new MRCException("InternalCallbackOperations must be called with a MRCCallbackRequest.");
+                }
+
+                InternalCallbackInterface callback = ((InternalCallbackMRCRequest) rq).getCallback();
+                callback.execute(rq);
+            }
+        }, method);
     }
 
     private void reportUserError(MRCOperation op, MRCRequest rq, Throwable exc, POSIXErrno errno) {

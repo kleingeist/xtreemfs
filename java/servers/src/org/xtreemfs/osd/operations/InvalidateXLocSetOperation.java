@@ -17,6 +17,7 @@ import org.xtreemfs.foundation.pbrpc.generatedinterfaces.RPC.ErrorType;
 import org.xtreemfs.foundation.pbrpc.generatedinterfaces.RPC.POSIXErrno;
 import org.xtreemfs.foundation.pbrpc.generatedinterfaces.RPC.RPCHeader.ErrorResponse;
 import org.xtreemfs.foundation.pbrpc.utils.ErrorUtils;
+import org.xtreemfs.mrc.stages.XLocSetCoordinator;
 import org.xtreemfs.osd.OSDRequest;
 import org.xtreemfs.osd.OSDRequestDispatcher;
 import org.xtreemfs.osd.stages.PreprocStage.InvalidateXLocSetCallback;
@@ -26,6 +27,12 @@ import org.xtreemfs.pbrpc.generatedinterfaces.OSD.xtreemfs_xloc_set_invalidateRe
 import org.xtreemfs.pbrpc.generatedinterfaces.OSD.xtreemfs_xloc_set_invalidateResponse;
 import org.xtreemfs.pbrpc.generatedinterfaces.OSDServiceConstants;
 
+/**
+ * Invalidates the XLocSet (view) on a certain replica.<br>
+ * Invalidated replicas won't respond to operations until a newer XLocSet is installed. The installation will be
+ * executed implicitly when a operation with a newer XLocSet is requested.<br>
+ * This operation is intended to be called from the MRCs {@link XLocSetCoordinator}.
+ */
 public class InvalidateXLocSetOperation extends OSDOperation {
     final String      sharedSecret;
     final ServiceUUID localUUID;
@@ -44,25 +51,26 @@ public class InvalidateXLocSetOperation extends OSDOperation {
 
     @Override
     public void startRequest(final OSDRequest rq) {
-        master.getPreprocStage().invalidateXLocSet(rq, new InvalidateXLocSetCallback() {
-            
-            @Override
-            public void invalidateComplete(boolean isPrimary, ErrorResponse error) {
-                if (error != null) {
-                    rq.sendError(error);
-                } else {
-                    postInvalidation(rq, isPrimary);
-                }
-            }
-        });
+        xtreemfs_xloc_set_invalidateRequest rpcrq = (xtreemfs_xloc_set_invalidateRequest) rq.getRequestArgs();
+
+        master.getPreprocStage().invalidateXLocSet(rq, rpcrq.getFileCredentials(), true,
+                new InvalidateXLocSetCallback() {
+
+                    @Override
+                    public void invalidateComplete(boolean isPrimary, ErrorResponse error) {
+                        if (error != null) {
+                            rq.sendError(error);
+                        } else {
+                            postInvalidation(rq, isPrimary);
+                        }
+                    }
+                });
     }
 
     private void postInvalidation(final OSDRequest rq, final boolean isPrimary) {
-        // TODO (jdillmann): RO replication
         if (rq.getLocationList().getReplicaUpdatePolicy().equals(ReplicaUpdatePolicies.REPL_UPDATE_PC_RONLY)) {
             invalidationFinished(rq, isPrimary, null);
         } else {
-            // TODO (jdillmann): check maxLocalObjVersion parameter @see CoordinatedReplicaUpdatePolicy.executeReset
             master.getStorageStage().internalGetReplicaState(rq.getFileId(),
                     rq.getLocationList().getLocalReplica().getStripingPolicy(), 0,
                     new InternalGetReplicaStateCallback() {
@@ -117,11 +125,8 @@ public class InvalidateXLocSetOperation extends OSDOperation {
     }
 
     @Override
-    public boolean requiresValidView() {
-        // Although the local view will invalidated it is required to check the request. This will ensure, that the
-        // local version equals the latest one.
-        // If this is not guaranteed, it could be that 'local version' < 'current version' < 'next version' and a
-        // request from an outdated client with 'current version' would reset the INVALIDATED flag and be successful.
+    public boolean bypassViewValidation() {
+        // View validation will be handled at {@link PreprocStage#invalidateXLocSet()}.
         return true;
     }
 }

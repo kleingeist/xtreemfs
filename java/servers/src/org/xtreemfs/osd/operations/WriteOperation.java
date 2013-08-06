@@ -1,5 +1,4 @@
 /*
-
  * Copyright (c) 2009-2011 by Bjoern Kolbeck,
  *               Zuse Institute Berlin
  *
@@ -222,15 +221,7 @@ public final class WriteOperation extends OSDOperation {
     }
 
     @Override
-    public boolean requiresValidView() {
-        return true;
-    }
-
-    @Override
     public void startInternalEvent(Object[] args) {
         throw new UnsupportedOperationException("Not supported yet.");
     }
-
-    
-
 }
