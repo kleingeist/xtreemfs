@@ -43,7 +43,7 @@ import org.xtreemfs.pbrpc.generatedinterfaces.OSD.TruncateLog;
  * 
  * @author clorenz
  */
-public class HashStorageLayout extends StorageLayout {
+public class HashStorageLayout extends FileStorageLayout {
 
     /**
      * file to store the truncate epoch in (metadata)
@@ -191,7 +191,7 @@ public class HashStorageLayout extends StorageLayout {
         ReusableBuffer bbuf = null;
         boolean checkChecksum = false;
 
-        if (length == -1) {
+        if (length == FULL_OBJECT_LENGTH) {
             assert (offset == 0) : "if length is -1 offset must be 0 but is " + offset;
             length = stripeSize;
             if (checksumsEnabled) {
@@ -894,7 +894,7 @@ public class HashStorageLayout extends StorageLayout {
 
             // initialize version table
             File vtFile = new File(fileDir, VTABLE_FILENAME);
-            VersionTable vt = new VersionTable(vtFile);
+            VersionTable vt = new FileVersionTable(vtFile);
             if (vtFile.exists())
                 vt.load();
 
@@ -909,7 +909,7 @@ public class HashStorageLayout extends StorageLayout {
             info.initLatestObjectVersions(new HashMap<Long, Long>());
             info.initLargestObjectVersions(new HashMap<Long, Long>());
             info.initObjectChecksums(new HashMap<Long, Map<Long, Long>>());
-            info.initVersionTable(new VersionTable(new File(fileDir, VTABLE_FILENAME)));
+            info.initVersionTable(new FileVersionTable(new File(fileDir, VTABLE_FILENAME)));
         }
 
         info.setGlobalLastObjectNumber(-1);

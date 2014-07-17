@@ -20,6 +20,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
+import org.xtreemfs.osd.storage.FileVersionTable;
 import org.xtreemfs.osd.storage.VersionTable;
 import org.xtreemfs.test.TestHelper;
 
@@ -53,8 +54,8 @@ public class VersionTableTest {
         map.put(11000L, new int[] { 5, 5, 8, 3, 3, 1, 1, 1 });
         map.put(12000L, new int[] { 5, 5 });
         map.put(32000L, new int[] {});
-
-        VersionTable vt = new VersionTable(VT_FILE);
+        
+        VersionTable vt = new FileVersionTable(VT_FILE);
         for (Entry<Long, int[]> entry : map.entrySet())
             vt.addVersion(entry.getKey(), entry.getValue(), entry.getValue().length * 1024);
 
@@ -85,8 +86,8 @@ public class VersionTableTest {
         map.put(11000L, new int[] { 5, 5, 8, 3, 3, 1, 1, 1 });
         map.put(12000L, new int[] { 5, 5 });
         map.put(32000L, new int[] {});
-
-        VersionTable vt = new VersionTable(VT_FILE);
+        
+        VersionTable vt = new FileVersionTable(VT_FILE);
         for (Entry<Long, int[]> entry : map.entrySet())
             vt.addVersion(entry.getKey(), entry.getValue(), entry.getValue().length * 1024);
 
