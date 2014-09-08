@@ -14,7 +14,8 @@ class Server:
                  data_dir,
                  rpc_port,
                  uuid,
-                 storage_threads):
+                 storage_threads,
+                 webinterface):
         self._start_stop_retries = start_stop_retries
         self._config_file_path = config_file_path
         self._run_dir_path = run_dir_path
@@ -28,6 +29,9 @@ class Server:
         self._config['uuid'] = uuid
         self._config['ssl.enabled'] = 'false'
         self._config['storage_threads'] = storage_threads
+
+        if not webinterface:
+            self._config['http_port'] = -1
 
     def configure(self):
         pass
@@ -136,7 +140,8 @@ class Server:
 
     def save_status_page(self, to_file_path):
         http_port = self.get_http_port()
-        os.system("wget -O %(to_file_path)s http://localhost:%(http_port)u" % locals())
+        if http_port != -1:
+            os.system("wget -O %(to_file_path)s http://localhost:%(http_port)u" % locals())
 
     def start(self,
               log_file_path=None):

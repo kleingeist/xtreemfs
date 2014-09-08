@@ -45,7 +45,8 @@ class TestEnvironment:
                  test_dir,
                  debug_level,
                  storage_threads,
-                 progress):
+                 progress,
+                 webinterface):
         self.__xtreemfs_dir = xtreemfs_dir
         self.__test_dir = os.path.abspath(test_dir)
         self.__debug_level = debug_level
@@ -56,6 +57,7 @@ class TestEnvironment:
         self.__osds = list()
         self.__storage_threads = storage_threads
         self.__progress = progress
+        self.__webinterface = webinterface
 
     def start(self):
         try:
@@ -141,7 +143,8 @@ class TestEnvironment:
                                          os.path.join(self.__test_dir, "data", "dir"),
                                          dir_port,
                                          "test-dir",
-                                         self.__storage_threads)
+                                         self.__storage_threads,
+                                         self.__webinterface)
             self.__dir.configure()
             self.__dir.set_debug_level(self.__debug_level)
             if ssl_enabled:
@@ -164,7 +167,8 @@ class TestEnvironment:
                                          os.path.join(self.__test_dir, "data", "mrc"),
                                          dir_port - 2,
                                          "test-mrc",
-                                         self.__storage_threads)
+                                         self.__storage_threads,
+                                         self.__webinterface)
             self.__mrc.configure("localhost", self.__dir.get_rpc_port())
             self.__mrc.set_debug_level(self.__debug_level)
             if ssl_enabled:
@@ -187,7 +191,8 @@ class TestEnvironment:
                                       os.path.join(self.__test_dir, "data", "osd"+str(osdNum)),
                                       dir_port + 2 +osdNum,
                                       "test-osd"+str(osdNum),
-                                      self.__storage_threads)
+                                      self.__storage_threads,
+                                      self.__webinterface)
                 osd.configure("localhost", self.__dir.get_rpc_port())
                 osd.set_debug_level(self.__debug_level)
                 if ssl_enabled:
@@ -490,6 +495,7 @@ if __name__ == "__main__":
     option_parser.add_option( "-f", "--start-test-env-with-ssl", action="store_true", dest="start_test_env_with_ssl", help="Same as -e, but with SSL enabled.")
     option_parser.add_option( "-s", "--storage-threads", action="store", dest="storage_threads", default=1, help="Number of storage threads per OSD.")
     option_parser.add_option( "-p", "--progress", action="store_true", dest="progress", help="Show progress by printing the test script output to stdout.")
+    option_parser.add_option( "-w", "--webinterface", action="store_true", dest="webinterface", default=False, help="Enable the webinterfaces.")
 
     if len(sys.argv) == 1:
         option_parser.print_help()
@@ -521,7 +527,8 @@ if __name__ == "__main__":
                                   options.test_dir,
                                   options.debug_level,
                                   options.storage_threads,
-                                  options.progress)
+                                  options.progress,
+                                  options.webinterface)
         testEnv.start()
         try:
             print
@@ -547,7 +554,8 @@ if __name__ == "__main__":
                                   options.test_dir,
                                   options.debug_level,
                                   options.storage_threads,
-                                  options.progress)
+                                  options.progress,
+                                  options.webinterface)
         testEnv.start()
         try:
             failed = testEnv.runTests()
