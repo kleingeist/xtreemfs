@@ -8,7 +8,6 @@
 
 package org.xtreemfs.osd;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -109,6 +108,7 @@ import org.xtreemfs.osd.storage.CleanupThread;
 import org.xtreemfs.osd.storage.CleanupVersionsThread;
 import org.xtreemfs.osd.storage.HashStorageLayout;
 import org.xtreemfs.osd.storage.MetadataCache;
+import org.xtreemfs.osd.storage.NullStorageLayout;
 import org.xtreemfs.osd.storage.StorageLayout;
 import org.xtreemfs.osd.vivaldi.VivaldiNode;
 import org.xtreemfs.pbrpc.generatedinterfaces.DIR.DirService;
@@ -314,13 +314,13 @@ public class OSDRequestDispatcher implements RPCServerRequestListener, LifeCycle
         StorageLayout storageLayout = null;
         if (config.getStorageLayout().equalsIgnoreCase(HashStorageLayout.class.getSimpleName())) {
             storageLayout = new HashStorageLayout(config, metadataCache);
-            /*
-             * } else if
-             * (config.getStorageLayout().equalsIgnoreCase(SingleFileStorageLayout
-             * .class.getSimpleName())) { storageLayout = new
-             * SingleFileStorageLayout(config, metadataCache);
-             */
-        } else {
+        } else if (config.getStorageLayout().equalsIgnoreCase(NullStorageLayout.class.getSimpleName())) {
+            storageLayout = new NullStorageLayout(config, metadataCache);
+        }
+        // else if (config.getStorageLayout().equalsIgnoreCase(SingleFileStorageLayout.class.getSimpleName())) {
+        // storageLayout = new SingleFileStorageLayout(config, metadataCache);
+        // }
+        else {
             throw new RuntimeException("unknown storage layout in config file: " + config.getStorageLayout());
         }
         
