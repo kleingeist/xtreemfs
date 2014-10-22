@@ -330,6 +330,14 @@ if (BUILD_PRELOAD)
   ADD_EXECUTABLE(preload_test "test/ld_preload/preload_test.cpp")
 endif(BUILD_PRELOAD)
 
+if (BUILD_BENCHMARKS)
+  find_source_files("src/benchmarks/*.cpp" "include/benchmarks/*.h" "include/benchmarks/*.hpp")
+  set(SRCS_BENCHMARKS ${FIND_RESULT})
+
+  ADD_EXECUTABLE(benchmark ${SRCS_BENCHMARKS} ${SRCS_JSONCPP})
+  TARGET_LINK_LIBRARIES(benchmark xtreemfs)
+endif(BUILD_BENCHMARKS)
+
 ################################################################################
 # Define building of unittests.
 ################################################################################
