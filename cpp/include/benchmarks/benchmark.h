@@ -20,6 +20,7 @@
 #include "rpc/ssl_options.h" // SSLOptions
 
 using namespace std;
+using namespace xtreemfs::pbrpc;
 
 namespace xtreemfs {
 
@@ -81,15 +82,9 @@ class BenchmarkResult {
 class Benchmark {
  public:
 
-
-  /**
-   * Create a Benchmark.
-   *
-   * @remark Ownership of ssl_options IS transferred to the benchmark.
-   */
-  Benchmark(ServiceAddresses& dir_service_addresses,
-            pbrpc::UserCredentials& user_credentials,
-            rpc::SSLOptions* ssl_options, BenchmarkOptions& options);
+  /** Create a Benchmark. */
+  Benchmark(pbrpc::UserCredentials& user_credentials,
+            BenchmarkOptions& options);
 
   ~Benchmark();
 
@@ -99,13 +94,24 @@ class Benchmark {
   /** Open the specified XtreemFS Volume and ensure it is suitable for benchmarking. */
   void prepareVolume(std::string& volume_name);
 
+  /** Create the default benchmarking volume # number.
+   *  Volumes created this way will be deleted upon destruction.
+   */
+  string createAndPrepareVolume(int number);
+
   /** Perform a single sequential write benchmark. */
   BenchmarkResult performSequentialWrite(char* data, size_t size,
-                                           long bench_size, int run);
+                                         long bench_size, int run);
 
   typedef boost::shared_ptr<Benchmark> SharedPtr;
 
  private:
+  /** Open and prepare the volume specified in volume_name_. */
+  void prepareVolume();
+
+  /** Deletes the volume if it has been created by this benchmark. */
+  void clearVolume();
+
   /** Ensure the file used for the benchmark exists but is truncated. */
   void prepareFile(string type, int run);
 
@@ -119,14 +125,14 @@ class Benchmark {
    */
   bool clearDirectory(bool delete_dir);
 
-  /**  List of DIR replicas */
-  ServiceAddresses dir_service_addresses_;
-
   /** Name and Groups of the user. */
   pbrpc::UserCredentials user_credentials_;
 
   /** SSL options, if set. */
   rpc::SSLOptions* ssl_options_;
+
+  /** Authentication used for operation. */
+  Auth auth_;
 
   /** Benchmark options. */
   BenchmarkOptions options_;
@@ -137,11 +143,20 @@ class Benchmark {
   /** Volume use for benchmarks. */
   Volume* volume_;
 
+  /** Name of the used Volume. */
+  string volume_name_;
+
+  /** Flag indicating if the volume has been created by this benchmark. */
+  bool volume_created_;
+
   /** File path of the last file used for benchmarks. */
   string file_path_;
 
   /** Directory path used for benchmarks. */
   static const string dir_path_;
+
+  /** Basename used for creating benchmark volumes. */
+  static const string volume_basename_;
 };
 
 }  // namespace xtreemfs

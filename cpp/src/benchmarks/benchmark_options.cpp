@@ -12,9 +12,11 @@
 #include <sstream>
 
 #include "libxtreemfs/helper.h"
+#include "libxtreemfs/pbrpc_url.h"
 #include "libxtreemfs/xtreemfs_exception.h"
 
 using namespace std;
+using namespace xtreemfs::pbrpc;
 
 namespace po = boost::program_options;
 namespace style = boost::program_options::command_line_style;
@@ -32,7 +34,7 @@ BenchmarkOptions::BenchmarkOptions()
       "\tbenchmark [options] volume1 volume2 ...\n"
       "\n"
       "The number of volumes must be in accordance with the number of benchmarks to be\n"
-      "started in parallel.\n"
+      "started in parallel. If no volume is given, n volumes will be created for the test.\n"
       "\n";
 
   benchmark_descriptions_.add_options()
@@ -53,9 +55,13 @@ BenchmarkOptions::BenchmarkOptions()
       ("stripe-width", po::value<int>(&stripe_width)->default_value(1),
           "stripe width")
       ("dir",
-          po::value<string>(&xtreemfs_url)
-            ->default_value("pbrpc://localhost:32638"),
-          "URL to DIR");
+          po::value<string>()->default_value("pbrpc://localhost:32638"),
+          "URL to DIR")
+      ("mrc",
+          po::value<string>()->default_value("pbrpc://localhost:32636"),
+          "URL to MRC")
+      ("admin_password", po::value<string>(&admin_password),
+          "administrator password to authorize operations");
 }
 
 void BenchmarkOptions::ParseCommandLine(int argc, char** argv) {
@@ -104,13 +110,19 @@ void BenchmarkOptions::ParseCommandLine(int argc, char** argv) {
             "benchmark type has to be specified");
   }
 
-  if (volume_names.size() != num) {
+  if (volume_names.size() != num && volume_names.size() > 0) {
     throw InvalidCommandLineParametersException(
         "invalid number of volumes: has to be equal to -n");
   }
 
-  // Extract information from command line.
-  Options::ParseURL(kDIR);
+  create_volumes = (volume_names.size() == 0);
+
+  // Parse addresses
+  PBRPCURL dir_url_parser, mrc_url_parser;
+  dir_url_parser.ParseURL(vm["dir"].as<string>(), PBRPCURL::GetSchemePBRPC(), DIR_PBRPC_PORT_DEFAULT);
+  dir_address = dir_url_parser.GetAddresses();
+  mrc_url_parser.ParseURL(vm["mrc"].as<string>(), PBRPCURL::GetSchemePBRPC(), MRC_PBRPC_PORT_DEFAULT);
+  mrc_address = mrc_url_parser.GetAddresses();
 }
 
 std::string BenchmarkOptions::ShowCommandLineUsage() {

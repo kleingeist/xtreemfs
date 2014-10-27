@@ -80,12 +80,16 @@ int main(int argc, char* argv[]) {
   vector<Benchmark::SharedPtr> benchmarks;
   for (int i = 0; i < options.num; ++i) {
     Benchmark::SharedPtr benchmark(
-        new Benchmark(options.service_addresses, user_credentials,
-                      options.GenerateSSLOptions(), options));
+        new Benchmark(user_credentials, options));
     benchmarks.push_back(benchmark);
 
     benchmark->init();
-    benchmark->prepareVolume(options.volume_names[i]);
+
+    if (options.create_volumes) {
+      benchmark->createAndPrepareVolume(i);
+    } else {
+      benchmark->prepareVolume(options.volume_names[i]);
+    }
   }
 
   vector<BenchmarkResult> results;
@@ -144,16 +148,23 @@ int main(int argc, char* argv[]) {
 namespace xtreemfs {
 
 const string Benchmark::dir_path_ = "benchmarks";
+const string Benchmark::volume_basename_ = "benchmark";
 
-Benchmark::Benchmark(ServiceAddresses& dir_service_addresses,
-                     pbrpc::UserCredentials& user_credentials,
-                     rpc::SSLOptions* ssl_options, BenchmarkOptions& options)
-    : dir_service_addresses_(dir_service_addresses),
-      user_credentials_(user_credentials),
-      ssl_options_(ssl_options),
+Benchmark::Benchmark(pbrpc::UserCredentials& user_credentials, BenchmarkOptions& options)
+    : user_credentials_(user_credentials),
       options_(options) {
 
+  ssl_options_ = options.GenerateSSLOptions();
+
+  if (options.admin_password.empty()) {
+    auth_.set_auth_type(AUTH_NONE);
+  } else {
+    auth_.set_auth_type(AUTH_PASSWORD);
+    auth_.mutable_auth_passwd()->set_password(options.admin_password);
+  }
+
   volume_ = NULL;
+  volume_created_ = false;
   client_ = NULL;
 }
 
@@ -164,6 +175,7 @@ Benchmark::~Benchmark() {
   }
 
   if (client_ != NULL) {
+    clearVolume();
     client_->Shutdown();
     delete client_;
   }
@@ -172,7 +184,7 @@ Benchmark::~Benchmark() {
 }
 
 void Benchmark::init() {
-  client_ = Client::CreateClient(dir_service_addresses_, user_credentials_,
+  client_ = Client::CreateClient(options_.dir_address, user_credentials_,
                                  ssl_options_, options_);
   client_->Start();
 }
@@ -237,8 +249,41 @@ bool Benchmark::clearDirectory(bool delete_dir) {
   return dir_exists;
 }
 
+string Benchmark::createAndPrepareVolume(int number) {
+  volume_created_ = true;
+
+  ostringstream ss;
+  ss << volume_basename_ << number;
+  volume_name_ = ss.str();
+
+  Auth auth;
+  auth.set_auth_type(AUTH_NONE);
+  client_->CreateVolume(options_.mrc_address, auth, user_credentials_,
+                        volume_name_);
+
+  prepareVolume();
+
+  return volume_name_;
+}
+
+void Benchmark::clearVolume() {
+  if (!volume_created_) {
+    return;
+  }
+
+  Auth auth;
+  auth.set_auth_type(AUTH_NONE);
+  client_->DeleteVolume(options_.mrc_address, auth, user_credentials_, volume_name_);
+}
+
 void Benchmark::prepareVolume(std::string& volume_name) {
-  volume_ = client_->OpenVolume(volume_name, ssl_options_, options_);
+  volume_created_ = false;
+  volume_name_ = volume_name;
+  prepareVolume();
+}
+
+void Benchmark::prepareVolume() {
+  volume_ = client_->OpenVolume(volume_name_, ssl_options_, options_);
 
   // Create or clear the benchmark directory.
   bool dir_exists = clearDirectory(false);

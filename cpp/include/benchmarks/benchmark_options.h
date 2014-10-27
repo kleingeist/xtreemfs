@@ -59,8 +59,20 @@ class BenchmarkOptions : public Options {
   /** Run sequential write benchmarks if this is set. */
   bool run_sw;
 
+  /** Administrator password to authorize operations. */
+  std::string admin_password;
+
+  /** Address to the used DIR */
+  ServiceAddresses dir_address;
+
+  /** Address to the used MRC */
+  ServiceAddresses mrc_address;
+
   /** Names of the Volumes used for benchmarks. */
   std::vector<std::string> volume_names;
+
+  /** Flag to indicate if volumes have to be created. */
+  bool create_volumes;
 
  private:
   /** Contains all available benchmark options and its descriptions. */
