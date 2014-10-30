@@ -50,6 +50,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  // Generate SSL Options used by connections.
+  rpc::SSLOptions* ssl_options = options.GenerateSSLOptions();
+
   // Set user_credentials.
   boost::scoped_ptr<SystemUserMapping> system_user_mapping;
   system_user_mapping.reset(SystemUserMapping::GetSystemUserMapping());
@@ -76,6 +79,14 @@ int main(int argc, char* argv[]) {
   char* block_data = new char[block_size];
   long bench_size = options.sequential_size;
 
+  // Create a client used for all connections.
+  // libxtreemfs doesn't allow for multiple clients in one program yet,
+  // so the clients have to be shared between all benchmarks.
+  boost::shared_ptr<Client> client(
+      Client::CreateClient(options.dir_address, user_credentials, ssl_options,
+                           options));
+  client->Start();
+
   // Initialize volumes
   vector<Benchmark::SharedPtr> benchmarks;
   for (int i = 0; i < options.num; ++i) {
@@ -83,7 +94,7 @@ int main(int argc, char* argv[]) {
         new Benchmark(user_credentials, options));
     benchmarks.push_back(benchmark);
 
-    benchmark->init();
+    benchmark->init(client);
 
     if (options.create_volumes) {
       benchmark->createAndPrepareVolume(i);
@@ -116,6 +127,7 @@ int main(int argc, char* argv[]) {
 
         // Run benchmark in another thread
         boost::thread task(boost::move(pt));
+
       }
     }
 
@@ -142,6 +154,15 @@ int main(int argc, char* argv[]) {
   }
 
   // Cleanup
+  for (vector<Benchmark::SharedPtr>::iterator it = benchmarks.begin();
+          it != benchmarks.end(); ++it) {
+    Benchmark::SharedPtr benchmark = *it;
+    benchmark->cleanup();
+  }
+  benchmarks.clear();
+
+  client->Shutdown();
+
   return 0;
 }
 
@@ -150,7 +171,8 @@ namespace xtreemfs {
 const string Benchmark::dir_path_ = "benchmarks";
 const string Benchmark::volume_basename_ = "benchmark";
 
-Benchmark::Benchmark(pbrpc::UserCredentials& user_credentials, BenchmarkOptions& options)
+Benchmark::Benchmark(pbrpc::UserCredentials& user_credentials,
+                     BenchmarkOptions& options)
     : user_credentials_(user_credentials),
       options_(options) {
 
@@ -165,28 +187,39 @@ Benchmark::Benchmark(pbrpc::UserCredentials& user_credentials, BenchmarkOptions&
 
   volume_ = NULL;
   volume_created_ = false;
-  client_ = NULL;
 }
 
 Benchmark::~Benchmark() {
   if (volume_ != NULL) {
-    clearDirectory(true);
     volume_->Close();
   }
 
-  if (client_ != NULL) {
-    clearVolume();
-    client_->Shutdown();
-    delete client_;
-  }
+  //  if (client_ != NULL) {
+  //    client_->Shutdown();
+  //  }
+  //  delete client_;
 
   delete ssl_options_;
 }
 
-void Benchmark::init() {
-  client_ = Client::CreateClient(options_.dir_address, user_credentials_,
-                                 ssl_options_, options_);
-  client_->Start();
+//void Benchmark::init() {
+//  client_ = Client::CreateClient(options_.dir_address, user_credentials_,
+//                                 ssl_options_, options_);
+//  client_->Start();
+//}
+
+void Benchmark::init(boost::shared_ptr<Client> client) {
+  client_ = client;
+}
+
+void Benchmark::cleanup() {
+  if (volume_ != NULL) {
+    clearDirectory(true);
+  }
+
+  if (client_ != NULL) {
+    clearVolume();
+  }
 }
 
 bool Benchmark::clearDirectory(bool delete_dir) {

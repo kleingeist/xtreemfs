@@ -63,6 +63,9 @@ class BenchmarkResult {
   /** The type of the benchmark. */
   string type_;
 
+  /** The number of the run this benchmark belonged to. */
+  int run_;
+
   /** Time in microseconds the benchmark run took. */
   double time_us_;
 
@@ -74,9 +77,6 @@ class BenchmarkResult {
 
   /** The number of parallel benchmark threads. */
   int parallel_;
-
-  /** The number of the run this benchmark belonged to. */
-  int run_;
 };
 
 class Benchmark {
@@ -88,8 +88,14 @@ class Benchmark {
 
   ~Benchmark();
 
-  /** Start a XtreemFS Client used by exclusively by this benchmark instance. */
-  void init();
+  //  /** Start a XtreemFS Client used by exclusively by this benchmark instance. */
+  //  void init();
+
+  /** Set the client used by this benchmark instance. */
+  void init(boost::shared_ptr<Client> client);
+
+  /** Delete files and volumes, that have been created by this benchmark. */
+  void cleanup();
 
   /** Open the specified XtreemFS Volume and ensure it is suitable for benchmarking. */
   void prepareVolume(std::string& volume_name);
@@ -137,8 +143,8 @@ class Benchmark {
   /** Benchmark options. */
   BenchmarkOptions options_;
 
-  /** Client used for benchmarks. */
-  Client* client_;
+  /** Client to use */
+  boost::shared_ptr<Client> client_;
 
   /** Volume use for benchmarks. */
   Volume* volume_;
