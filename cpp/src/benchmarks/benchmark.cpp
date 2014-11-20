@@ -8,7 +8,6 @@
 #include "benchmarks/benchmark.h"
 
 #include <boost/scoped_ptr.hpp>
-#include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
 #include <iostream>
 #include <sstream>
@@ -82,16 +81,14 @@ int main(int argc, char* argv[]) {
   // Create a client used for all connections.
   // libxtreemfs doesn't allow for multiple clients in one program yet,
   // so the clients have to be shared between all benchmarks.
-  boost::shared_ptr<Client> client(
-      Client::CreateClient(options.dir_address, user_credentials, ssl_options,
-                           options));
+  Client* client = Client::CreateClient(options.dir_address, user_credentials,
+                                        ssl_options, options);
   client->Start();
 
   // Initialize volumes
-  vector<Benchmark::SharedPtr> benchmarks;
+  vector<Benchmark*> benchmarks;
   for (int i = 0; i < options.num; ++i) {
-    Benchmark::SharedPtr benchmark(
-        new Benchmark(user_credentials, options));
+    Benchmark* benchmark = new Benchmark(user_credentials, options);
     benchmarks.push_back(benchmark);
 
     benchmark->init(client);
@@ -113,9 +110,9 @@ int main(int argc, char* argv[]) {
     vector<boost::shared_future<BenchmarkResult> > future_results;
 
     // Run each benchmark in parallel.
-    for (vector<Benchmark::SharedPtr>::iterator it = benchmarks.begin();
+    for (vector<Benchmark*>::iterator it = benchmarks.begin();
         it != benchmarks.end(); ++it) {
-      Benchmark::SharedPtr benchmark = *it;
+      Benchmark* benchmark = (*it);
 
       if (options.run_sw) {
         // Prepare thread
@@ -127,7 +124,6 @@ int main(int argc, char* argv[]) {
 
         // Run benchmark in another thread
         boost::thread task(boost::move(pt));
-
       }
     }
 
@@ -154,14 +150,16 @@ int main(int argc, char* argv[]) {
   }
 
   // Cleanup
-  for (vector<Benchmark::SharedPtr>::iterator it = benchmarks.begin();
+  for (vector<Benchmark*>::iterator it = benchmarks.begin();
           it != benchmarks.end(); ++it) {
-    Benchmark::SharedPtr benchmark = *it;
+    Benchmark* benchmark = (*it);
     benchmark->cleanup();
+    delete benchmark;
   }
   benchmarks.clear();
 
   client->Shutdown();
+  delete client;
 
   return 0;
 }
@@ -202,13 +200,7 @@ Benchmark::~Benchmark() {
   delete ssl_options_;
 }
 
-//void Benchmark::init() {
-//  client_ = Client::CreateClient(options_.dir_address, user_credentials_,
-//                                 ssl_options_, options_);
-//  client_->Start();
-//}
-
-void Benchmark::init(boost::shared_ptr<Client> client) {
+void Benchmark::init(Client* client) {
   client_ = client;
 }
 

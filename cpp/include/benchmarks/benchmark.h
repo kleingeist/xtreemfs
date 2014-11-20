@@ -9,7 +9,6 @@
 #define BENCHMARK_H_
 
 #include <cstddef>
-#include <boost/shared_ptr.hpp>
 #include <string>
 
 #include "pbrpc/RPC.pb.h" // UserCredentials
@@ -88,11 +87,8 @@ class Benchmark {
 
   ~Benchmark();
 
-  //  /** Start a XtreemFS Client used by exclusively by this benchmark instance. */
-  //  void init();
-
   /** Set the client used by this benchmark instance. */
-  void init(boost::shared_ptr<Client> client);
+  void init(Client* client);
 
   /** Delete files and volumes, that have been created by this benchmark. */
   void cleanup();
@@ -108,8 +104,6 @@ class Benchmark {
   /** Perform a single sequential write benchmark. */
   BenchmarkResult performSequentialWrite(char* data, size_t size,
                                          long bench_size, int run);
-
-  typedef boost::shared_ptr<Benchmark> SharedPtr;
 
  private:
   /** Open and prepare the volume specified in volume_name_. */
@@ -144,7 +138,7 @@ class Benchmark {
   BenchmarkOptions options_;
 
   /** Client to use */
-  boost::shared_ptr<Client> client_;
+  Client* client_;
 
   /** Volume use for benchmarks. */
   Volume* volume_;
