@@ -26,6 +26,7 @@ public:
 
 	virtual void start() = 0;
 	virtual TimeT elapsed() const = 0;
+	virtual TimeT getStartTime() const = 0;
 };
 
 
@@ -46,7 +47,11 @@ public:
 	{
 		return (TimeT)(getticks() - startTime);
 	}
-
+	
+	virtual TimeT getStartTime() const
+	{
+		return (TimeT)(startTime);
+	}
 private:
 	ticks startTime;	
 };
@@ -74,6 +79,10 @@ public:
 		return (TimeT)((stopTime.tv_sec - startTime.tv_sec) * 1000000000 +  (stopTime.tv_nsec - startTime.tv_nsec));
 	}
 
+	virtual TimeT getStartTime() const
+	{
+		return (TimeT)(startTime.tv_sec * 1000000000 + startTime.tv_nsec);
+	}
 private:
 	struct timespec startTime;
 };
@@ -98,6 +107,11 @@ public:
 		struct timeval stopTime;
 		gettimeofday(&stopTime, 0);
 		return (TimeT)((stopTime.tv_sec - startTime.tv_sec) * 1000000 +  (stopTime.tv_usec - startTime.tv_usec));
+	}
+
+	virtual TimeT getStartTime() const
+	{
+		return (TimeT)(startTime.tv_sec * 1000000 + startTime.tv_usec);
 	}
 
 private:
@@ -128,6 +142,11 @@ public:
 	virtual TimeT elapsed() const
 	{
 		return clock->elapsed();
+	}
+
+	virtual TimeT getStartTime() const
+	{
+		return clock->getStartTime();
 	}
 
 private:
